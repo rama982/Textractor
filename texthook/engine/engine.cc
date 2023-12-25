@@ -584,16 +584,88 @@ bool FindKiriKiriHook(DWORD fun, DWORD size, DWORD pt, DWORD flag) // jichi 10/2
   return false;
 }
 
+bool KiriKiri3Filter(LPVOID data, DWORD *size, HookParam *, BYTE)
+{
+  auto text = reinterpret_cast<LPWSTR>(data);
+  auto len = reinterpret_cast<size_t *>(size);
+  static std::wstring prevText;
+
+  if (!*len)
+    return false;
+  text[*len/sizeof(wchar_t)] = L'\0';  // clean text
+  if (!prevText.compare(text))
+    return false;
+  prevText = text;
+
+  if (cpp_wcsnstr(text, L"[", *len/sizeof(wchar_t))) {
+    WideStringCharReplacer(text, len, L"[r]", 3, L' ');
+    WideStringFilterBetween(text, len, L"[", 1, L"]\\", 2);
+    // ruby type 1
+    WideStringFilterBetween(text, len, L"[mruby r=", 9, L"\" text=\"", 8); // [mruby r="ゆきみ" text="由紀美"]
+    // ruby type 2
+    WideStringFilterBetween(text, len, L"[ruby text=", 11, L"]", 1); // [ruby text="せんがわ" align="e"][ch text="仙川"]
+    WideStringFilter(text, len, L"[ch text=\"", 10);                 // [ruby text="せんがわ" align="e"][ch text="仙川"]
+    // ruby type 1-2
+    WideStringFilter(text, len, L"\"]", 2);
+    // end ruby
+    WideStringFilter(text, len, L"[heart]", 7);
+  }
+  if (cpp_wcsnstr(text, L"[", *len/sizeof(wchar_t))) // detect garbage sentence. [ruby text=%r][ch text=%text][macropop]
+    return false;
+
+  return true;
+}
+
+bool InsertKiriKiri3Hook()
+{
+  //by Blu3train
+  /*
+  * Sample games:
+  * https://vndb.org/v16190
+  * https://vndb.org/v43048
+  * https://vndb.org/v46112
+  * https://vndb.org/v20491
+  * https://vndb.org/v28695
+  * https://vndb.org/v5549
+  * https://vndb.org/v28513
+  * https://vndb.org/v46499
+  */
+  const BYTE bytes[] = {
+    0x75, 0x09,                      // jne GAME.EXE+1D5B37
+    0x8B, 0x85, XX4,                 // mov eax,[ebp-00000254]
+    0xFF, 0x40, 0x78                 // inc [eax+78]
+  };
+
+  ULONG range = min(processStopAddress - processStartAddress, MAX_REL_ADDR);
+  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStartAddress + range);
+  if (!addr) {
+    ConsoleOutput("vnreng:KiriKiri3: pattern not found");
+    return false;
+  }
+
+  HookParam hp = {};
+  hp.address = addr;
+  hp.offset = pusha_ecx_off -4;
+  hp.index = 0;
+  hp.split = pusha_eax_off-4;
+  hp.split_index = 0;
+  hp.type = USING_UNICODE | USING_STRING | USING_SPLIT;
+  hp.filter_fun = KiriKiri3Filter;
+  ConsoleOutput("vnreng: INSERT KiriKiri3");
+  NewHook(hp, "KiriKiri3");
+  return true;
+}
+
 bool InsertKiriKiriHook() // 9/20/2014 jichi: change return type to bool
 {
   bool k1 = FindKiriKiriHook((DWORD)GetGlyphOutlineW,      processStopAddress - processStartAddress, processStartAddress, 0), // KiriKiri1
-       k2 = FindKiriKiriHook((DWORD)GetTextExtentPoint32W, processStopAddress - processStartAddress, processStartAddress, 1); // KiriKiri2
+       k2 = FindKiriKiriHook((DWORD)GetTextExtentPoint32W, processStopAddress - processStartAddress, processStartAddress, 1), // KiriKiri2
+       k3 = InsertKiriKiri3Hook(); // KiriKiri3
   //RegisterEngineType(ENGINE_KIRIKIRI);
   if (k1 && k2) {
     ConsoleOutput("vnreng:KiriKiri1: disable GDI hooks");
-    
   }
-  return k1 || k2;
+  return k1 || k2 || k3;
 }
 
 /** 10/20/2014 jichi: KAGParser
