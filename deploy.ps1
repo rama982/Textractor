@@ -62,7 +62,8 @@ foreach ($language in @{
 			"Replacer",
 			"Replacer Process Hooked",
 			"Styler",
-			"Thread Linker"
+			"Thread Linker",
+			"Yandex Translate"
 		))
 		{
 			copy -Force -Recurse -Verbose -Destination "$folder/$arch/$extension.xdll" -Path "Release_$arch/$extension.dll";
