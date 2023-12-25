@@ -55,6 +55,7 @@ foreach ($language in @{
 			"Regex Replacer",
 			"Regex Replacer Process Hooked",
 			"Remove Repeated Characters",
+			"Remove Repeated Leading Sentence",
 			"Remove Repeated Phrases",
 			"Remove Repeated Phrases 2",
 			"Remove 30 Repeated Sentences",
