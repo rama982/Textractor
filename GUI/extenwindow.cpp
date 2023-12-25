@@ -20,8 +20,6 @@ namespace
 	constexpr auto EXTEN_SAVE_FILE = u8"SavedExtensions.txt";
 	constexpr auto DEFAULT_EXTENSIONS = u8"Remove Repeated Characters>Regex Filter>Copy to Clipboard>Google Translate>Extra Window>Extra Newlines";
 
-	QEvent::Type extenDirType=(QEvent::Type)QEvent::registerEventType(2000);
-
 	struct Extension
 	{
 		std::wstring name;
@@ -32,7 +30,6 @@ namespace
 	concurrency::reader_writer_lock extenMutex;
 	std::vector<Extension> extensions;
 	ExtenWindow* This = nullptr;
-	QString extenSaveFileName = EXTEN_SAVE_FILE;
 
 	bool Load(QString extenName)
 	{
@@ -75,7 +72,7 @@ namespace
 	void Sync()
 	{
 		ui.extenList->clear();
-		QTextFile extenSaveFile(extenSaveFileName, QIODevice::WriteOnly | QIODevice::Truncate);
+		QTextFile extenSaveFile(EXTEN_SAVE_FILE, QIODevice::WriteOnly | QIODevice::Truncate);
 		concurrency::reader_writer_lock::scoped_lock_read readLock(extenMutex);
 		for (auto extension : extensions)
 		{
@@ -135,15 +132,6 @@ void CleanupExtensions()
 	extensions.clear();
 }
 
-void loadExtensions(std::wstring repositoryDir)
-{
-	extenSaveFileName = S(repositoryDir);
-	extenSaveFileName += EXTEN_SAVE_FILE;
-
-	QEvent* e = new QEvent(extenDirType);
-	QCoreApplication::postEvent( ui.extenList, e );  // Qt will delete it when done
-}
-
 ExtenWindow::ExtenWindow(QWidget* parent) : QMainWindow(parent, Qt::WindowCloseButtonHint)
 {
 	This = this;
@@ -154,7 +142,9 @@ ExtenWindow::ExtenWindow(QWidget* parent) : QMainWindow(parent, Qt::WindowCloseB
 	connect(ui.extenList, &QListWidget::customContextMenuRequested, ContextMenu);
 	ui.extenList->installEventFilter(this);
 
-	loadExtensions();
+	if (!QFile::exists(EXTEN_SAVE_FILE)) QTextFile(EXTEN_SAVE_FILE, QIODevice::WriteOnly).write(DEFAULT_EXTENSIONS);
+	for (auto extenName : QString(QTextFile(EXTEN_SAVE_FILE, QIODevice::ReadOnly).readAll()).split(">")) Load(extenName);
+	Sync();
 }
 
 bool ExtenWindow::eventFilter(QObject* target, QEvent* event)
@@ -165,13 +155,6 @@ bool ExtenWindow::eventFilter(QObject* target, QEvent* event)
 		QStringList extenNames;
 		for (int i = 0; i < ui.extenList->count(); ++i) extenNames.push_back(ui.extenList->item(i)->text());
 		Reorder(extenNames);
-		Sync();
-	}
-	if (event->type() == extenDirType)
-	{
-		CleanupExtensions();
-		if (!QFile::exists(extenSaveFileName)) QTextFile(extenSaveFileName, QIODevice::WriteOnly).write(DEFAULT_EXTENSIONS);
-		for (auto extenName : QString(QTextFile(extenSaveFileName, QIODevice::ReadOnly).readAll()).split(">")) Load(extenName);
 		Sync();
 	}
 	return false;
